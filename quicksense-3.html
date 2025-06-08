@@ -1,0 +1,546 @@
+<script type="text/javascript">
+        var gk_isXlsx = false;
+        var gk_xlsxFileLookup = {};
+        var gk_fileData = {};
+        function filledCell(cell) {
+          return cell !== '' && cell != null;
+        }
+        function loadFileData(filename) {
+        if (gk_isXlsx && gk_xlsxFileLookup[filename]) {
+            try {
+                var workbook = XLSX.read(gk_fileData[filename], { type: 'base64' });
+                var firstSheetName = workbook.SheetNames[0];
+                var worksheet = workbook.Sheets[firstSheetName];
+
+                // Convert sheet to JSON to filter blank rows
+                var jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, blankrows: false, defval: '' });
+                // Filter out blank rows (rows where all cells are empty, null, or undefined)
+                var filteredData = jsonData.filter(row => row.some(filledCell));
+
+                // Heuristic to find the header row by ignoring rows with fewer filled cells than the next row
+                var headerRowIndex = filteredData.findIndex((row, index) =>
+                  row.filter(filledCell).length >= filteredData[index + 1]?.filter(filledCell).length
+                );
+                // Fallback
+                if (headerRowIndex === -1 || headerRowIndex > 25) {
+                  headerRowIndex = 0;
+                }
+
+                // Convert filtered JSON back to CSV
+                var csv = XLSX.utils.aoa_to_sheet(filteredData.slice(headerRowIndex)); // Create a new sheet from filtered array of arrays
+                csv = XLSX.utils.sheet_to_csv(csv, { header: 1 });
+                return csv;
+            } catch (e) {
+                console.error(e);
+                return "";
+            }
+        }
+        return gk_fileData[filename] || "";
+        }
+        </script><!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Quicksense</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    .report-card {
+      border-right: 4px solid;
+    }
+    .critical { border-color: #EF4444; background-color: #FEF2F2; }
+    .high { border-color: #F97316; background-color: #FFF7ED; }
+    .normal { border-color: #22C55E; background-color: #F0FDF4; }
+    .verified { background-color: #F0FDF4; }
+    .unverified { background-color: #FEF2F2; }
+  </style>
+</head>
+<body class="min-h-screen bg-gray-50">
+  <!-- Login Screen -->
+  <div id="login-screen" class="min-h-screen bg-blue-100 flex items-center justify-center p-4">
+    <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full text-center">
+      <i data-lucide="shield" class="w-12 h-12 text-blue-600 mx-auto mb-4"></i>
+      <h1 class="text-xl font-bold text-gray-800 mb-2">Quicksense</h1>
+      <p class="text-gray-600 mb-4">דמו - לצרכי תחרות</p>
+      <button onclick="showView('citizen-login', 'אזרח')" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded mb-2 flex items-center justify-center gap-2">
+        <i data-lucide="user" class="w-5 h-5"></i>
+        <span>כניסת אזרחים</span>
+      </button>
+      <button onclick="showView('security-login', 'גורם ביטחון')" class="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded flex items-center justify-center gap-2">
+        <i data-lucide="shield" class="w-5 h-5"></i>
+        <span>כניסת גורמי ביטחון</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Citizen Login -->
+  <div id="citizen-login" class="min-h-screen bg-blue-100 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full text-center">
+      <i data-lucide="user" class="w-12 h-12 text-blue-600 mx-auto mb-4"></i>
+      <h1 class="text-xl font-bold text-gray-800 mb-2">כניסת אזרחים</h1>
+      <form id="citizen-login-form" onsubmit="citizenLogin(event)">
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">אימייל</label>
+          <input type="email" id="citizen-email" class="w-full p-2 border rounded" required>
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">סיסמה</label>
+          <input type="password" id="citizen-password" class="w-full p-2 border rounded" required>
+        </div>
+        <button type="submit" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded">התחבר</button>
+      </form>
+      <button onclick="showView('citizen-register', 'אזרח')" class="mt-4 text-blue-600 hover:underline"> אין לך חשבון? הירשם</button>
+      <button onclick="showView('login-screen', '')" class="mt-2 text-blue-600 hover:underline">חזור</button>
+    </div>
+  </div>
+
+  <!-- Citizen Registration -->
+  <div id="citizen-register" class="min-h-screen bg-blue-100 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full text-center">
+      <i data-lucide="user-plus" class="w-12 h-12 text-blue-600 mx-auto mb-4"></i>
+      <h1 class="text-xl font-bold text-gray-800 mb-2">הרשמה - אזרחים</h1>
+      <form id="citizen-register-form" onsubmit="registerCitizen(event)">
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">שם משתמש</label>
+          <input type="text" id="register-username" class="w-full p-2 border rounded" required>
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">אימייל</label>
+          <input type="email" id="register-email" class="w-full p-2 border rounded" required>
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">סיסמה</label>
+          <input type="password" id="register-password" class="w-full p-2 border rounded" required>
+        </div>
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">טלפון</label>
+          <input type="tel" id="register-phone" class="w-full p-2 border rounded" required>
+        </div>
+        <button type="submit" class="w-full bg-green-500 hover:bg-green-600 text-white py-2 rounded">הירשם</button>
+      </form>
+      <button onclick="showView('citizen-login', 'אזרח')" class="mt-4 text-blue-600 hover:underline">כבר יש לך חשבון? התחבר</button>
+      <button onclick="showView('login-screen', '')" class="mt-2 text-blue-600 hover:underline">חזור</button>
+    </div>
+  </div>
+
+  <!-- Security Login -->
+  <div id="security-login" class="min-h-screen bg-blue-100 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-lg shadow-lg p-6 max-w-sm w-full text-center">
+      <i data-lucide="shield" class="w-12 h-12 text-blue-600 mx-auto mb-4"></i>
+      <h1 class="text-xl font-bold text-gray-800 mb-2">כניסת גורמי ביטחון</h1>
+      <form id="security-login-form" onsubmit="securityLogin(event)">
+        <div class="mb-3">
+          <label class="block text-sm font-medium text-gray-700">סיסמה</label>
+          <input type="password" id="security-password" class="w-full p-2 border rounded" required>
+        </div>
+        <button type="submit" class="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded">התחבר</button>
+      </form>
+      <button onclick="showView('login-screen', '')" class="mt-4 text-blue-600 hover:underline">חזור</button>
+    </div>
+  </div>
+
+  <!-- Citizen Dashboard -->
+  <div id="citizen-dashboard" class="min-h-screen bg-gray-50 hidden">
+    <header class="bg-green-500 text-white p-4">
+      <div class="max-w-4xl mx-auto flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <i data-lucide="user" class="w-6 h-6"></i>
+          <h1 class="text-lg font-bold">Quicksense - פורטל אזרחים</h1>
+        </div>
+        <button onclick="logout()" class="bg-green-600 hover:bg-green-700 px-3 py-1 rounded">התנתק</button>
+      </div>
+    </header>
+    <div class="max-w-4xl mx-auto p-4">
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-white rounded-lg shadow p-4">
+          <h2 class="text-lg font-bold text-gray-800 mb-3 flex items-center gap-2">
+            <i data-lucide="alert-triangle" class="w-5 h-5 text-orange-500"></i>
+            <span>דיווח חירום</span>
+          </h2>
+          <form id="report-form" onsubmit="submitReport(event)">
+            <div class="mb-3">
+              <label class="block text-sm font-medium text-gray-700">סוג האירוע</label>
+              <select id="type" class="w-full p-2 border rounded" required>
+                <option value="">בחר סוג</option>
+                <option value="שריפה">שריפה</option>
+                <option value="תאונת דרכים">תאונת דרכים</option>
+                <option value="אירוע ביטחוני">אירוע ביטחוני</option>
+                <option value="אסון טבע">אסון טבע</option>
+                <option value="אחר">אחר</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="block text-sm font-medium text-gray-700">מיקום</label>
+              <input type="text" id="location" class="w-full p-2 border rounded" placeholder="רחוב, עיר" required>
+            </div>
+            <div class="mb-3">
+              <label class="block text-sm font-medium text-gray-700">תיאור</label>
+              <textarea id="description" class="w-full p-2 border rounded" rows="3" placeholder="תאר את האירוע" required></textarea>
+            </div>
+            <div class="mb-3">
+              <label class="block text-sm font-medium text-gray-700">חומרה</label>
+              <select id="severity" class="w-full p-2 border rounded" required>
+                <option value="">בחר חומרה</option>
+                <option value="נמוך">נמוך</option>
+                <option value="בינוני">בינוני</option>
+                <option value="גבוה">גבוה</option>
+                <option value="קריטי">קריטי</option>
+              </select>
+            </div>
+            <div class="mb-3">
+              <label class="block text-sm font-medium text-gray-700">אימייל</label>
+              <input type="email" id="email" class="w-full p-2 border rounded" readonly>
+            </div>
+            <button type="submit" class="w-full bg-red-500 hover:bg-red-600 text-white py-2 rounded font-semibold">שלח דיווח</button>
+          </form>
+        </div>
+        <div class="bg-white rounded-lg shadow p-4">
+          <h2 class="text-lg font-bold text-gray-800 mb-3">דיווחים מאומתים</h2>
+          <div id="verified-reports" class="space-y-3">
+            <!-- Verified reports added dynamically -->
+          </div>
+          <h2 class="text-lg font-bold text-gray-800 mb-3 mt-6">הדיווחים שלי</h2>
+          <div id="my-reports" class="space-y-3">
+            <!-- User's sent reports added dynamically -->
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Security Dashboard -->
+  <div id="security-dashboard" class="min-h-screen bg-gray-50 hidden">
+    <header class="bg-red-500 text-white p-4">
+      <div class="max-w-4xl mx-auto flex justify-between items-center">
+        <div class="flex items-center gap-2">
+          <i data-lucide="shield" class="w-6 h-6"></i>
+          <h1 class="text-lg font-bold">מרכז בקרה - Quicksense</h1>
+        </div>
+        <button onclick="logout()" class="bg-red-600 hover:bg-red-700 px-3 py-1 rounded">התנתק</button>
+      </div>
+    </header>
+    <div class="max-w-4xl mx-auto p-4">
+      <div class="bg-white rounded-lg shadow p-4">
+        <h2 class="text-lg font-bold text-gray-800 mb-3">כל הדיווחים</h2>
+        <div class="overflow-x-auto">
+          <table class="w-full">
+            <thead class="bg-gray-100">
+              <tr>
+                <th class="p-2 text-right text-xs font-medium text-gray-500">סוג</th>
+                <th class="p-2 text-right text-xs font-medium text-gray-500">מיקום</th>
+                <th class="p-2 text-right text-xs font-medium text-gray-500">תיאור</th>
+                <th class="p-2 text-right text-xs font-medium text-gray-500">חומרה</th>
+                <th class="p-2 text-right text-xs font-medium text-gray-500">זמן</th>
+                <th class="p-2 text-right text-xs font-medium text-gray-500">סטטוס</th>
+                <th class="p-2 text-right text-xs font-medium text-gray-500">פעולות</th>
+              </tr>
+            </thead>
+            <tbody id="all-reports">
+              <!-- All reports added dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // Initialize Lucide icons
+    try {
+      lucide.createIcons();
+    } catch (e) {
+      console.error('Failed to initialize Lucide icons:', e);
+    }
+
+    // Simulated user and report storage (replace with database in production)
+    let users = [
+      { email: 'test@example.com', password: 'pass123', username: 'demoUser', phone: '123-456-7890' }
+    ];
+    let reports = [
+      {
+        id: 1,
+        type: 'שריפה',
+        location: 'תל אביב - רחוב דיזנגוף 45',
+        description: 'שריפה בבניין מגורים, עשן צפוף',
+        severity: 'גבוה',
+        time: new Date().toLocaleString('he-IL'),
+        reporter: 'אזרח',
+        status: 'ממתין לאימות',
+        verified: false,
+        email: 'test@example.com'
+      },
+      {
+        id: 2,
+        type: 'תאונת דרכים',
+        location: 'ירושלים - כביש 1',
+        description: 'תאונה עם נפגעים, חסימת נתיב',
+        severity: 'בינוני',
+        time: new Date(Date.now() - 300000).toLocaleString('he-IL'),
+        reporter: 'אזרח',
+        status: 'מאומת',
+        verified: true,
+        email: 'user2@example.com'
+      }
+    ];
+    let userType = '';
+    let currentUserEmail = '';
+    let currentUserName = '';
+
+    // Show specific view
+    function showView(viewId, type = '') {
+      userType = type;
+      document.querySelectorAll('#login-screen, #citizen-login, #citizen-register, #security-login, #citizen-dashboard, #security-dashboard').forEach(el => {
+        el.classList.add('hidden');
+      });
+      const targetView = document.getElementById(viewId);
+      if (targetView) {
+        targetView.classList.remove('hidden');
+      }
+      if (viewId === 'citizen-dashboard' && currentUserEmail) {
+        const emailInput = document.getElementById('email');
+        if (emailInput) {
+          emailInput.value = currentUserEmail;
+        }
+        updateReports();
+      } else if (viewId === 'security-dashboard') {
+        updateReports();
+      }
+    }
+
+    // Register new citizen
+    function registerCitizen(event) {
+      event.preventDefault();
+      const username = document.getElementById('register-username').value;
+      const email = document.getElementById('register-email').value;
+      const password = document.getElementById('register-password').value;
+      const phone = document.getElementById('register-phone').value;
+
+      if (!username || !email || !password || !phone) {
+        alert('אנא מלא את כל השדות!');
+        return;
+      }
+
+      const existingUser = users.find(u => u.email === email);
+      if (existingUser) {
+        alert('האימייל כבר רשום! אנא התחבר או השתמש באימייל אחר.');
+        return;
+      }
+
+      users.push({ email, password, username, phone });
+      alert('הרשמה הושלמה! כעת תוכל להתחבר.');
+      showView('citizen-login', 'אזרח');
+    }
+
+    // Citizen login
+    function citizenLogin(event) {
+      event.preventDefault();
+      const email = document.getElementById('citizen-email').value;
+      const password = document.getElementById('citizen-password').value;
+
+      if (!email || !password) {
+        alert('אנא מלא את כל השדות!');
+        return;
+      }
+
+      const user = users.find(u => u.email === email && u.password === password);
+      if (user) {
+        currentUserEmail = email;
+        currentUserName = user.username;
+        showView('citizen-dashboard', 'אזרח');
+      } else {
+        alert('אימייל או סיסמה שגויים!');
+      }
+    }
+
+    // Security login
+    function securityLogin(event) {
+      event.preventDefault();
+      const password = document.getElementById('security-password').value;
+      const SECURITY_PASSWORD = 'secure123'; // Replace with secure method in production
+      if (password === SECURITY_PASSWORD) {
+        currentUserEmail = 'security@example.com';
+        currentUserName = 'גורם ביטחון';
+        showView('security-dashboard', 'גורם ביטחון');
+      } else {
+        alert('סיסמה שגויה!');
+      }
+    }
+
+    // Logout
+    function logout() {
+      userType = '';
+      currentUserEmail = '';
+      currentUserName = '';
+      showView('login-screen', '');
+    }
+
+    // Submit new report
+    function submitReport(event) {
+      event.preventDefault();
+      const form = document.getElementById('report-form');
+      const typeInput = document.getElementById('type');
+      const locationInput = document.getElementById('location');
+      const descriptionInput = document.getElementById('description');
+      const severityInput = document.getElementById('severity');
+      const emailInput = document.getElementById('email');
+
+      if (!typeInput || !locationInput || !descriptionInput || !severityInput || !emailInput) {
+        alert('שגיאה: שדות הטופס לא נמצאו');
+        return;
+      }
+
+      const type = typeInput.value;
+      const location = locationInput.value;
+      const description = descriptionInput.value;
+      const severity = severityInput.value;
+      const email = emailInput.value;
+
+      if (!type || !location || !description || !severity || !email) {
+        alert('אנא מלא את כל השדות!');
+        return;
+      }
+
+      if (email !== currentUserEmail) {
+        alert('האימייל בטופס חייב להתאים לאימייל שלך!');
+        return;
+      }
+
+      const newReport = {
+        id: reports.length + 1,
+        type: type,
+        location: location,
+        description: description,
+        severity: severity,
+        time: new Date().toLocaleString('he-IL'),
+        reporter: userType,
+        status: 'ממתין לאימות',
+        verified: false,
+        email: email
+      };
+
+      const similarReports = reports.filter(r => 
+        r.type === newReport.type && r.location.includes(newReport.location.split(' ')[0])
+      );
+      if (similarReports.length >= 1) {
+        newReport.verified = true;
+        newReport.status = 'מאומת';
+      }
+
+      reports.unshift(newReport);
+      form.reset();
+      emailInput.value = currentUserEmail;
+      alert('הדיווח נשלח בהצלחה!');
+      updateReports();
+    }
+
+    // Toggle report verification
+    function toggleVerification(id) {
+      reports = reports.map(report => {
+        if (report.id === id) {
+          return { ...report, verified: !report.verified, status: report.verified ? 'ממתין לאימות' : 'מאומת' };
+        }
+        return report;
+      });
+      updateReports();
+    }
+
+    // Update reports in UI
+    function updateReports() {
+      // Update verified reports for citizens
+      const verifiedReports = document.getElementById('verified-reports');
+      if (verifiedReports) {
+        verifiedReports.innerHTML = '';
+        reports.filter(r => r.verified).forEach(report => {
+          const className = report.severity === 'קריטי' ? 'critical' : report.severity === 'גבוה' ? 'high' : 'normal';
+          verifiedReports.innerHTML += `
+            <div class="p-3 rounded report-card ${className}">
+              <div class="flex justify-between items-start">
+                <h3 class="font-semibold text-gray-800">${report.type}</h3>
+                <div class="flex items-center gap-1 text-green-600">
+                  <i data-lucide="check-circle" class="w-4 h-4"></i>
+                  <span class="text-xs">מאומת</span>
+                </div>
+              </div>
+              <p class="text-sm text-gray-600">${report.description}</p>
+              <div class="flex justify-between text-xs text-gray-500">
+                <div class="flex items-center gap-1">
+                  <i data-lucide="map-pin" class="w-3 h-3"></i>
+                  <span>${report.location}</span>
+                </div>
+                <span>${report.time}</span>
+              </div>
+            </div>
+          `;
+        });
+      }
+
+      // Update user's sent reports
+      const myReports = document.getElementById('my-reports');
+      if (myReports) {
+        myReports.innerHTML = '';
+        reports.filter(r => r.reporter === 'אזרח' && r.email === currentUserEmail).forEach(report => {
+          const className = report.severity === 'קריטי' ? 'critical' : report.severity === 'גבוה' ? 'high' : 'normal';
+          myReports.innerHTML += `
+            <div class="p-3 rounded report-card ${className}">
+              <div class="flex justify-between items-start">
+                <h3 class="font-semibold text-gray-800">${report.type}</h3>
+                <div class="flex items-center gap-1 ${report.verified ? 'text-green-600' : 'text-red-600'}">
+                  <i data-lucide="${report.verified ? 'check-circle' : 'x-circle'}" class="w-4 h-4"></i>
+                  <span class="text-xs">${report.status}</span>
+                </div>
+              </div>
+              <p class="text-sm text-gray-600">${report.description}</p>
+              <div class="flex justify-between text-xs text-gray-500">
+                <div class="flex items-center gap-1">
+                  <i data-lucide="map-pin" class="w-3 h-3"></i>
+                  <span>${report.location}</span>
+                </div>
+                <span>${report.time}</span>
+              </div>
+            </div>
+          `;
+        });
+      }
+
+      // Update all reports for security
+      const allReports = document.getElementById('all-reports');
+      if (allReports) {
+        allReports.innerHTML = '';
+        reports.forEach(report => {
+          const className = report.verified ? 'verified' : 'unverified';
+          allReports.innerHTML += `
+            <tr class="${className}">
+              <td class="p-2 text-sm text-gray-800">${report.type}</td>
+              <td class="p-2 text-sm text-gray-800">${report.location}</td>
+              <td class="p-2 text-sm text-gray-800">${report.description}</td>
+              <td class="p-2 text-sm text-gray-800">${report.severity}</td>
+              <td class="p-2 text-sm text-gray-800">${report.time}</td>
+              <td class="p-2 text-sm text-gray-800">${report.status}</td>
+              <td class="p-2 text-sm">
+                <button onclick="toggleVerification(${report.id})" class="px-2 py-1 rounded ${report.verified ? 'bg-yellow-500 hover:bg-yellow-600' : 'bg-green-500 hover:bg-green-600'} text-white">
+                  ${report.verified ? 'בטל' : 'אמת'}
+                </button>
+              </td>
+            </tr>
+          `;
+        });
+      }
+
+      try {
+        lucide.createIcons();
+      } catch (e) {
+        console.error('Failed to reinitialize Lucide icons:', e);
+      }
+    }
+
+    // Initial render
+    try {
+      lucide.createIcons();
+    } catch (e) {
+      console.error('Failed to initialize Lucide icons:', e);
+    }
+    updateReports();
+  </script>
+</body>
+</html>
